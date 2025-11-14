@@ -1,4 +1,6 @@
 package com.example.appgasiot.data.model
 
-class GasConfig {
-}
+data class GasConfig(
+    val minimo: Int = 0,
+    val maximo: Int = 0
+)

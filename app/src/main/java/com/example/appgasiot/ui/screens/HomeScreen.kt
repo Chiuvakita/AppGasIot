@@ -8,12 +8,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.Text
-
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ListAlt
-
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -21,7 +19,9 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.appgasiot.navigation.AppScreen
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.launch
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,6 +29,53 @@ fun HomeScreen(navController: NavController) {
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    // ----------------------------------
+    // LECTURA DE DATOS DESDE FIREBASE
+    // ----------------------------------
+
+    val db = FirebaseDatabase.getInstance().reference
+
+    var estadoCompuerta by remember { mutableStateOf("Cargando...") }
+    var ultimaLectura by remember { mutableStateOf<String?>(null) }
+    var ultimoEvento by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+
+        // Estado compuerta
+        db.child("horarios_compuerta").get().addOnSuccessListener { snap ->
+            val est = snap.child("estado").value?.toString()
+            estadoCompuerta = when (est) {
+                "abierto" -> "Abierta"
+                "cerrado" -> "Cerrada"
+                else -> "Sin configuración"
+            }
+        }
+
+        // Última lectura
+        db.child("historial_lecturas").limitToLast(1).get()
+            .addOnSuccessListener { snap ->
+                for (child in snap.children) {
+                    val valor = child.child("valor").value?.toString()
+                    val fecha = child.child("fecha").value?.toString()
+                    val hora = child.child("hora").value?.toString()
+                    ultimaLectura = "$valor ppm • $fecha $hora"
+                }
+            }
+
+        // Último evento crítico
+        db.child("eventos_criticos").limitToLast(1).get()
+            .addOnSuccessListener { snap ->
+                for (child in snap.children) {
+                    val desc = child.child("descripcion").value?.toString()
+                    val fecha = child.child("fecha").value?.toString()
+                    val hora = child.child("hora").value?.toString()
+                    val valor = child.child("valor").value?.toString()
+                    ultimoEvento = "$desc • $valor ppm • $fecha $hora"
+                }
+            }
+    }
+
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -41,28 +88,26 @@ fun HomeScreen(navController: NavController) {
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(20.dp)
                 )
-                Spacer(Modifier.height(10.dp))
 
-                // ⭐ SOLO LAS 4 OPCIONES QUE TE PIDIERON
+                Spacer(Modifier.height(10.dp))
 
                 DrawerItem("Rangos de gas") {
                     navController.navigate(AppScreen.RangosGas.ruta)
                 }
 
                 DrawerItem("Horarios de compuerta") {
-                    // navController.navigate(AppScreen.Horarios.ruta)
+                    navController.navigate(AppScreen.HorariosCompuertaMenu.ruta)
                 }
 
                 DrawerItem("Eventos críticos") {
-                    // navController.navigate(AppScreen.Eventos.ruta)
+                    navController.navigate(AppScreen.EventosCriticos.ruta)
                 }
 
                 DrawerItem("Historial de lecturas") {
-                    // navController.navigate(AppScreen.Historial.ruta)
+                    navController.navigate(AppScreen.HistorialLecturas.ruta)
                 }
 
                 Spacer(Modifier.height(20.dp))
-
                 HorizontalDivider()
 
                 DrawerItem("Cerrar sesión", icon = Icons.AutoMirrored.Filled.Logout) {
@@ -89,17 +134,67 @@ fun HomeScreen(navController: NavController) {
                 )
             }
         ) { padding ->
+
             Column(
                 Modifier
-                    .fillMaxSize()
                     .padding(padding)
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.Center
+                    .padding(20.dp)
+                    .fillMaxSize(),
+                verticalArrangement = Arrangement.Top
             ) {
+
                 Text(
-                    "Bienvenido a la App IoT",
+                    "Bienvenido",
                     style = MaterialTheme.typography.headlineMedium
                 )
+
+                Spacer(Modifier.height(20.dp))
+
+                // TARJETA: ESTADO COMPUERTA
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(Modifier.padding(18.dp)) {
+                        Text("Estado de la compuerta", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(6.dp))
+                        Text(estadoCompuerta)
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                // TARJETA: ÚLTIMA LECTURA
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(Modifier.padding(18.dp)) {
+                        Text("Última lectura de gas", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(6.dp))
+                        Text(ultimaLectura ?: "No hay datos")
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                // TARJETA: ÚLTIMO EVENTO CRÍTICO
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(Modifier.padding(18.dp)) {
+                        Text("Último evento crítico", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(6.dp))
+                        Text(ultimoEvento ?: "No hay eventos críticos")
+                    }
+                }
             }
         }
     }

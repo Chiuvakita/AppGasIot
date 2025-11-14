@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "501213284647",
+    "project_id": "appgasiot",
+    "storage_bucket": "appgasiot.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:501213284647:android:5be9c4b3d381b650a60102",
+        "android_client_info": {
+          "package_name": "com.example.appgasiot"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCVrDk13xwXu5DEwb58NYXX6rX-mOfr6Co"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
