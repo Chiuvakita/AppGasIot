@@ -17,4 +17,8 @@ sealed class AppScreen(val ruta: String) {
     // historiales
     object EventosCriticos : AppScreen("pantalla_eventos_criticos")
     object HistorialLecturas : AppScreen("pantalla_historial_lecturas")
+
+    //Control compuerta
+    object ControlCompuerta : AppScreen("pantalla_control_compuerta")
+
 }

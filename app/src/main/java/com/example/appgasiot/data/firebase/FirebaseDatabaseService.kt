@@ -1,48 +1,56 @@
 package com.example.appgasiot.data.firebase
 
-import com.example.appgasiot.data.model.GasConfig
-import com.google.firebase.database.FirebaseDatabase
+import android.util.Log
+import com.example.appgasiot.data.state.GasState
+import com.google.firebase.database.*
 
 class FirebaseDatabaseService {
 
     private val db = FirebaseDatabase.getInstance().reference
 
-    // GUARDAR RANGOS DE GAS
-    fun guardarRangos(min: Int, max: Int, onComplete: (Boolean) -> Unit) {
-        val data = mapOf("minimo" to min, "maximo" to max)
-
-        db.child("config_gas").setValue(data)
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { onComplete(false) }
+    init {
+        escucharRangosGas()
     }
 
-    // LEER RANGOS DE GAS
-    fun leerRangos(onData: (GasConfig?) -> Unit) {
-        db.child("config_gas").get()
-            .addOnSuccessListener { snap ->
-                if (!snap.exists()) {
-                    onData(null)
-                    return@addOnSuccessListener
+    private fun escucharRangosGas() {
+        db.child("config_gas")
+            .addValueEventListener(object : ValueEventListener {
+
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    Log.d("REALTIME", "Cambio detectado: ${snapshot.value}")
+
+                    val min = snapshot.child("minimo").getValue(Int::class.java)
+                    val max = snapshot.child("maximo").getValue(Int::class.java)
+
+                    if (min != null && max != null) {
+                        GasState.actualizar(min, max)
+                    } else {
+                        GasState.limpiar()
+                    }
                 }
 
-                val min = snap.child("minimo").value?.toString()?.toIntOrNull()
-                val max = snap.child("maximo").value?.toString()?.toIntOrNull()
-
-                if (min != null && max != null) {
-                    onData(GasConfig(min, max))
-                } else {
-                    onData(null)
+                override fun onCancelled(error: DatabaseError) {
+                    Log.e("REALTIME", "Error Firebase: ${error.message}")
                 }
-            }
-            .addOnFailureListener {
-                onData(null)
-            }
+            })
     }
 
-    // ELIMINAR RANGOS
-    fun eliminarRangos(onComplete: (Boolean) -> Unit) {
-        db.child("config_gas").removeValue()
-            .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { onComplete(false) }
+    fun guardarRangos(min: Int, max: Int, callback: (Boolean) -> Unit) {
+        val data = mapOf(
+            "minimo" to min,
+            "maximo" to max
+        )
+
+        db.child("config_gas")
+            .setValue(data)
+            .addOnSuccessListener { callback(true) }
+            .addOnFailureListener { callback(false) }
+    }
+
+    fun eliminarRangos(callback: (Boolean) -> Unit) {
+        db.child("config_gas")
+            .removeValue()
+            .addOnSuccessListener { callback(true) }
+            .addOnFailureListener { callback(false) }
     }
 }

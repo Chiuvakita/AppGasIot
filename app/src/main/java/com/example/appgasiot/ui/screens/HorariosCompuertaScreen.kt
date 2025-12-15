@@ -12,7 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.appgasiot.navigation.AppScreen
-import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -32,13 +32,11 @@ fun HorariosCompuertaScreen(navController: NavController, modo: String?) {
     val dbRoot = FirebaseDatabase.getInstance().reference.child("horarios_compuerta")
     val dbRef = dbRoot.child(modoSeguro!!)
 
-    // Estado actual desde Firebase
     var inicioFechaActual by remember { mutableStateOf<String?>(null) }
     var inicioHoraActual by remember { mutableStateOf<String?>(null) }
     var finFechaActual by remember { mutableStateOf<String?>(null) }
     var finHoraActual by remember { mutableStateOf<String?>(null) }
 
-    // Nuevos valores (formularios)
     var fechaInicio by remember { mutableStateOf("") }
     var horaInicio by remember { mutableStateOf("") }
     var fechaFin by remember { mutableStateOf("") }
@@ -51,24 +49,35 @@ fun HorariosCompuertaScreen(navController: NavController, modo: String?) {
     val context = LocalContext.current
     val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
-    // 🔹 Cargar configuración inicial
-    LaunchedEffect(modoSeguro) {
-        dbRef.get().addOnSuccessListener { snap ->
-            if (snap.exists()) {
-                inicioFechaActual = snap.child("inicio_fecha").value?.toString()
-                inicioHoraActual = snap.child("inicio_hora").value?.toString()
-                finFechaActual = snap.child("fin_fecha").value?.toString()
-                finHoraActual = snap.child("fin_hora").value?.toString()
-            } else {
-                inicioFechaActual = null
-                inicioHoraActual = null
-                finFechaActual = null
-                finHoraActual = null
+    // ✅ TIEMPO REAL: en vez de get(), escuchamos el nodo del modo
+    DisposableEffect(modoSeguro) {
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snap: DataSnapshot) {
+                if (snap.exists()) {
+                    inicioFechaActual = snap.child("inicio_fecha").value?.toString()
+                    inicioHoraActual = snap.child("inicio_hora").value?.toString()
+                    finFechaActual = snap.child("fin_fecha").value?.toString()
+                    finHoraActual = snap.child("fin_hora").value?.toString()
+                } else {
+                    inicioFechaActual = null
+                    inicioHoraActual = null
+                    finFechaActual = null
+                    finHoraActual = null
+                }
             }
+
+            override fun onCancelled(error: DatabaseError) {
+                // no cambia tu UI
+            }
+        }
+
+        dbRef.addValueEventListener(listener)
+
+        onDispose {
+            dbRef.removeEventListener(listener)
         }
     }
 
-    // 🔹 Helper para seleccionar fecha+hora en una sola acción
     fun seleccionarFechaHora(onResult: (String, String) -> Unit) {
         val cal = Calendar.getInstance()
 
@@ -94,7 +103,6 @@ fun HorariosCompuertaScreen(navController: NavController, modo: String?) {
         ).show()
     }
 
-    // 🔹 Diálogo de confirmación para eliminar
     if (mostrarConfirmacion) {
         AlertDialog(
             onDismissRequest = { mostrarConfirmacion = false },
@@ -147,7 +155,6 @@ fun HorariosCompuertaScreen(navController: NavController, modo: String?) {
             verticalArrangement = Arrangement.Top
         ) {
 
-            // === CONFIGURACIÓN ACTUAL ===
             Text("Configuración actual:", style = MaterialTheme.typography.titleMedium)
 
             if (inicioFechaActual != null && inicioHoraActual != null &&
@@ -161,7 +168,6 @@ fun HorariosCompuertaScreen(navController: NavController, modo: String?) {
 
             Spacer(Modifier.height(20.dp))
 
-            // === BOTONES EDITAR / ELIMINAR ===
             if (!modoEditar && inicioFechaActual != null) {
 
                 OutlinedButton(
@@ -185,7 +191,6 @@ fun HorariosCompuertaScreen(navController: NavController, modo: String?) {
                 Spacer(Modifier.height(20.dp))
             }
 
-            // === FORMULARIO (NUEVO O EDICIÓN) ===
             if (modoEditar || inicioFechaActual == null) {
 
                 Text("Inicio del período:", style = MaterialTheme.typography.labelLarge)
@@ -230,10 +235,8 @@ fun HorariosCompuertaScreen(navController: NavController, modo: String?) {
 
                 Spacer(Modifier.height(24.dp))
 
-                // === BOTÓN GUARDAR ===
                 Button(
                     onClick = {
-                        // Validar campos vacíos
                         if (fechaInicio.isBlank() || horaInicio.isBlank() ||
                             fechaFin.isBlank() || horaFin.isBlank()
                         ) {
@@ -254,7 +257,6 @@ fun HorariosCompuertaScreen(navController: NavController, modo: String?) {
                             return@Button
                         }
 
-                        // 🔹 Validar que NO se cruce con el otro modo
                         val otraClave = if (modoSeguro == "apertura") "cierre" else "apertura"
 
                         dbRoot.child(otraClave).get().addOnSuccessListener { otherSnap ->
@@ -281,7 +283,6 @@ fun HorariosCompuertaScreen(navController: NavController, modo: String?) {
                                 }
                             }
 
-                            // 🔹 Si NO hay cruce → guardar
                             val data = mapOf(
                                 "inicio_fecha" to fechaInicio,
                                 "inicio_hora" to horaInicio,
@@ -321,7 +322,6 @@ fun HorariosCompuertaScreen(navController: NavController, modo: String?) {
 
             Spacer(Modifier.height(16.dp))
 
-            // Mensaje de validación / éxito
             mensaje?.let {
                 Text(
                     text = it,

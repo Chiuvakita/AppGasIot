@@ -3,11 +3,6 @@ package com.example.appgasiot.ui.screens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -19,9 +14,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.appgasiot.navigation.AppScreen
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.*
 import kotlinx.coroutines.launch
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,53 +24,81 @@ fun HomeScreen(navController: NavController) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    // ----------------------------------
-    // LECTURA DE DATOS DESDE FIREBASE
-    // ----------------------------------
-
     val db = FirebaseDatabase.getInstance().reference
 
     var estadoCompuerta by remember { mutableStateOf("Cargando...") }
-    var ultimaLectura by remember { mutableStateOf<String?>(null) }
-    var ultimoEvento by remember { mutableStateOf<String?>(null) }
+    var ultimaLectura by remember { mutableStateOf("Cargando...") }
+    var ultimoEvento by remember { mutableStateOf("Cargando...") }
 
-    LaunchedEffect(Unit) {
+    // ==============================
+    // 🔥 LISTENERS EN TIEMPO REAL
+    // ==============================
+    DisposableEffect(Unit) {
 
-        // Estado compuerta
-        db.child("horarios_compuerta").get().addOnSuccessListener { snap ->
-            val est = snap.child("estado").value?.toString()
-            estadoCompuerta = when (est) {
-                "abierto" -> "Abierta"
-                "cerrado" -> "Cerrada"
-                else -> "Sin configuración"
+        // ---- ESTADO COMPUERTA ----
+        val estadoListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val est = snapshot.value?.toString()
+                estadoCompuerta = when (est) {
+                    "abierto" -> "Abierta"
+                    "cerrado" -> "Cerrada"
+                    else -> "Sin configuración"
+                }
             }
+            override fun onCancelled(error: DatabaseError) {}
         }
+        db.child("control_compuerta").child("estado")
+            .addValueEventListener(estadoListener)
 
-        // Última lectura
-        db.child("historial_lecturas").limitToLast(1).get()
-            .addOnSuccessListener { snap ->
-                for (child in snap.children) {
+        // ---- ÚLTIMA LECTURA ----
+        val lecturaListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                snapshot.children.firstOrNull()?.let { child ->
                     val valor = child.child("valor").value?.toString()
                     val fecha = child.child("fecha").value?.toString()
                     val hora = child.child("hora").value?.toString()
                     ultimaLectura = "$valor ppm • $fecha $hora"
                 }
             }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        db.child("historial_lecturas")
+            .limitToLast(1)
+            .addValueEventListener(lecturaListener)
 
-        // Último evento crítico
-        db.child("eventos_criticos").limitToLast(1).get()
-            .addOnSuccessListener { snap ->
-                for (child in snap.children) {
+        // ---- ÚLTIMO EVENTO CRÍTICO ----
+        val eventoListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                snapshot.children.firstOrNull()?.let { child ->
                     val desc = child.child("descripcion").value?.toString()
+                    val valor = child.child("valor").value?.toString()
                     val fecha = child.child("fecha").value?.toString()
                     val hora = child.child("hora").value?.toString()
-                    val valor = child.child("valor").value?.toString()
                     ultimoEvento = "$desc • $valor ppm • $fecha $hora"
                 }
             }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        db.child("eventos_criticos")
+            .limitToLast(1)
+            .addValueEventListener(eventoListener)
+
+        // 🔥 LIMPIEZA
+        onDispose {
+            db.child("control_compuerta").child("estado")
+                .removeEventListener(estadoListener)
+
+            db.child("historial_lecturas")
+                .removeEventListener(lecturaListener)
+
+            db.child("eventos_criticos")
+                .removeEventListener(eventoListener)
+        }
     }
 
-
+    // ==============================
+    // UI
+    // ==============================
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -89,9 +111,7 @@ fun HomeScreen(navController: NavController) {
                     modifier = Modifier.padding(20.dp)
                 )
 
-                Spacer(Modifier.height(10.dp))
-
-                DrawerItem("Rangos de gas") {
+                DrawerItem("Rangos de gas - Alerta") {
                     navController.navigate(AppScreen.RangosGas.ruta)
                 }
 
@@ -105,6 +125,10 @@ fun HomeScreen(navController: NavController) {
 
                 DrawerItem("Historial de lecturas") {
                     navController.navigate(AppScreen.HistorialLecturas.ruta)
+                }
+
+                DrawerItem("Control de compuerta") {
+                    navController.navigate(AppScreen.ControlCompuerta.ruta)
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -139,63 +163,36 @@ fun HomeScreen(navController: NavController) {
                 Modifier
                     .padding(padding)
                     .padding(20.dp)
-                    .fillMaxSize(),
-                verticalArrangement = Arrangement.Top
+                    .fillMaxSize()
             ) {
 
-                Text(
-                    "Bienvenido",
-                    style = MaterialTheme.typography.headlineMedium
-                )
-
+                Text("Bienvenido", style = MaterialTheme.typography.headlineMedium)
                 Spacer(Modifier.height(20.dp))
 
-                // TARJETA: ESTADO COMPUERTA
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(Modifier.padding(18.dp)) {
-                        Text("Estado de la compuerta", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(6.dp))
-                        Text(estadoCompuerta)
-                    }
-                }
-
+                DashboardCard("Estado de la compuerta", estadoCompuerta)
                 Spacer(Modifier.height(14.dp))
 
-                // TARJETA: ÚLTIMA LECTURA
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(Modifier.padding(18.dp)) {
-                        Text("Última lectura de gas", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(6.dp))
-                        Text(ultimaLectura ?: "No hay datos")
-                    }
-                }
-
+                DashboardCard("Última lectura de gas", ultimaLectura)
                 Spacer(Modifier.height(14.dp))
 
-                // TARJETA: ÚLTIMO EVENTO CRÍTICO
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(Modifier.padding(18.dp)) {
-                        Text("Último evento crítico", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(6.dp))
-                        Text(ultimoEvento ?: "No hay eventos críticos")
-                    }
-                }
+                DashboardCard("Último evento crítico", ultimoEvento)
             }
+        }
+    }
+}
+
+@Composable
+private fun DashboardCard(titulo: String, contenido: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text(titulo, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(6.dp))
+            Text(contenido)
         }
     }
 }

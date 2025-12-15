@@ -42,5 +42,11 @@ fun AppNav(navController: NavHostController) {
         // NUEVAS PANTALLAS
         composable(AppScreen.EventosCriticos.ruta) { EventosCriticosScreen(navController) }
         composable(AppScreen.HistorialLecturas.ruta) { HistorialLecturasScreen(navController) }
+
+        //controlCompuerta
+        composable(AppScreen.ControlCompuerta.ruta) {
+            ControlCompuertaScreen(navController)
+        }
+
     }
 }

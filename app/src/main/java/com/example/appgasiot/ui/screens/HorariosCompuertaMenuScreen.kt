@@ -9,7 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.appgasiot.navigation.AppScreen
-import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -21,6 +21,15 @@ fun HorariosCompuertaMenuScreen(navController: NavController) {
 
     var apertura by remember { mutableStateOf<Map<String, String>?>(null) }
     var cierre by remember { mutableStateOf<Map<String, String>?>(null) }
+
+    // ✅ Tick para que el texto "Estado" se refresque solo (sin cambiar diseño)
+    var tick by remember { mutableStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            tick = System.currentTimeMillis()
+            kotlinx.coroutines.delay(30_000) // cada 30s
+        }
+    }
 
     // 🔹 Calcula estado y tiempo restante según fecha/hora y tipo (apertura/cierre)
     fun calcularEstado(data: Map<String, String>?, tipo: String): String {
@@ -51,31 +60,50 @@ fun HorariosCompuertaMenuScreen(navController: NavController) {
         }
     }
 
-    // 🔹 Cargar configuración de apertura y cierre desde Firebase
-    LaunchedEffect(Unit) {
-        dbRef.child("apertura").get().addOnSuccessListener {
-            if (it.exists()) {
-                apertura = mapOf(
-                    "inicio_fecha" to it.child("inicio_fecha").value.toString(),
-                    "inicio_hora" to it.child("inicio_hora").value.toString(),
-                    "fin_fecha" to it.child("fin_fecha").value.toString(),
-                    "fin_hora" to it.child("fin_hora").value.toString()
-                )
-            } else {
-                apertura = null
+    // ✅ TIEMPO REAL: escucha apertura y cierre
+    DisposableEffect(Unit) {
+        val aperturaListener = object : ValueEventListener {
+            override fun onDataChange(it: DataSnapshot) {
+                apertura =
+                    if (it.exists()) {
+                        mapOf(
+                            "inicio_fecha" to (it.child("inicio_fecha").value?.toString() ?: ""),
+                            "inicio_hora" to (it.child("inicio_hora").value?.toString() ?: ""),
+                            "fin_fecha" to (it.child("fin_fecha").value?.toString() ?: ""),
+                            "fin_hora" to (it.child("fin_hora").value?.toString() ?: "")
+                        )
+                    } else null
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                // no cambia tu UI, solo evita crash
             }
         }
-        dbRef.child("cierre").get().addOnSuccessListener {
-            if (it.exists()) {
-                cierre = mapOf(
-                    "inicio_fecha" to it.child("inicio_fecha").value.toString(),
-                    "inicio_hora" to it.child("inicio_hora").value.toString(),
-                    "fin_fecha" to it.child("fin_fecha").value.toString(),
-                    "fin_hora" to it.child("fin_hora").value.toString()
-                )
-            } else {
-                cierre = null
+
+        val cierreListener = object : ValueEventListener {
+            override fun onDataChange(it: DataSnapshot) {
+                cierre =
+                    if (it.exists()) {
+                        mapOf(
+                            "inicio_fecha" to (it.child("inicio_fecha").value?.toString() ?: ""),
+                            "inicio_hora" to (it.child("inicio_hora").value?.toString() ?: ""),
+                            "fin_fecha" to (it.child("fin_fecha").value?.toString() ?: ""),
+                            "fin_hora" to (it.child("fin_hora").value?.toString() ?: "")
+                        )
+                    } else null
             }
+
+            override fun onCancelled(error: DatabaseError) {
+                // no cambia tu UI
+            }
+        }
+
+        dbRef.child("apertura").addValueEventListener(aperturaListener)
+        dbRef.child("cierre").addValueEventListener(cierreListener)
+
+        onDispose {
+            dbRef.child("apertura").removeEventListener(aperturaListener)
+            dbRef.child("cierre").removeEventListener(cierreListener)
         }
     }
 
@@ -100,7 +128,6 @@ fun HorariosCompuertaMenuScreen(navController: NavController) {
             verticalArrangement = Arrangement.Top
         ) {
 
-            // === BOTONES PRINCIPALES ===
             Text(
                 "Selecciona qué deseas configurar:",
                 style = MaterialTheme.typography.titleMedium
@@ -138,7 +165,6 @@ fun HorariosCompuertaMenuScreen(navController: NavController) {
 
             Spacer(Modifier.height(24.dp))
 
-            // === BLOQUE APERTURA ===
             Text(
                 "Período de APERTURA",
                 style = MaterialTheme.typography.titleMedium
@@ -166,24 +192,19 @@ fun HorariosCompuertaMenuScreen(navController: NavController) {
                                 AppScreen.HorariosCompuerta.crearRuta("apertura")
                             )
                         }
-                    ) {
-                        Text("Editar")
-                    }
+                    ) { Text("Editar") }
 
                     TextButton(
                         onClick = {
                             dbRef.child("apertura").removeValue()
-                            apertura = null
+                            // no seteo apertura = null a mano; el listener lo hará en tiempo real
                         }
-                    ) {
-                        Text("Eliminar")
-                    }
+                    ) { Text("Eliminar") }
                 }
             }
 
             Spacer(Modifier.height(24.dp))
 
-            // === BLOQUE CIERRE ===
             Text(
                 "Período de CIERRE",
                 style = MaterialTheme.typography.titleMedium
@@ -211,18 +232,14 @@ fun HorariosCompuertaMenuScreen(navController: NavController) {
                                 AppScreen.HorariosCompuerta.crearRuta("cierre")
                             )
                         }
-                    ) {
-                        Text("Editar")
-                    }
+                    ) { Text("Editar") }
 
                     TextButton(
                         onClick = {
                             dbRef.child("cierre").removeValue()
-                            cierre = null
+                            // listener lo actualiza en tiempo real
                         }
-                    ) {
-                        Text("Eliminar")
-                    }
+                    ) { Text("Eliminar") }
                 }
             }
         }

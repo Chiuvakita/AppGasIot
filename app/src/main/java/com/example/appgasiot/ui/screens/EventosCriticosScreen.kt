@@ -7,23 +7,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.appgasiot.data.model.EventoCritico
 import com.example.appgasiot.navigation.AppScreen
 import com.google.firebase.database.*
-import kotlinx.coroutines.launch
 import java.util.*
-
-
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,13 +37,14 @@ fun EventosCriticosScreen(navController: NavController) {
     var eventoAEliminar by remember { mutableStateOf<EventoCritico?>(null) }
 
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
-    // Carga de datos
-    LaunchedEffect(Unit) {
-        db.addValueEventListener(object : ValueEventListener {
+    // ✅ TIEMPO REAL – listener bien gestionado
+    DisposableEffect(Unit) {
+
+        val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val temp = mutableListOf<EventoCritico>()
+
                 for (child in snapshot.children) {
                     temp.add(
                         EventoCritico(
@@ -60,11 +56,20 @@ fun EventosCriticosScreen(navController: NavController) {
                         )
                     )
                 }
+
                 listaEventos = temp.sortedByDescending { it.fecha + it.hora }
             }
 
-            override fun onCancelled(error: DatabaseError) {}
-        })
+            override fun onCancelled(error: DatabaseError) {
+                // no cambia UI
+            }
+        }
+
+        db.addValueEventListener(listener)
+
+        onDispose {
+            db.removeEventListener(listener)
+        }
     }
 
     // Confirmación de eliminación
@@ -94,9 +99,13 @@ fun EventosCriticosScreen(navController: NavController) {
             TopAppBar(
                 title = { Text("Eventos críticos") },
                 navigationIcon = {
-                    IconButton(onClick = { navController.navigate(AppScreen.Home.ruta) }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-
+                    IconButton(onClick = {
+                        navController.navigate(AppScreen.Home.ruta)
+                    }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver"
+                        )
                     }
                 }
             )
@@ -110,13 +119,12 @@ fun EventosCriticosScreen(navController: NavController) {
                 .fillMaxSize()
         ) {
 
-            // Filtros
+            // === FILTROS POR FECHA ===
             Text("Filtrar por fecha", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(10.dp))
 
             Row(Modifier.fillMaxWidth()) {
 
-                // Fecha inicio
                 OutlinedButton(
                     onClick = {
                         val cal = Calendar.getInstance()
@@ -137,7 +145,6 @@ fun EventosCriticosScreen(navController: NavController) {
 
                 Spacer(Modifier.width(10.dp))
 
-                // Fecha fin
                 OutlinedButton(
                     onClick = {
                         val cal = Calendar.getInstance()
@@ -159,7 +166,7 @@ fun EventosCriticosScreen(navController: NavController) {
 
             Spacer(Modifier.height(20.dp))
 
-            // Filtro por valor
+            // === FILTRO POR VALOR ===
             Text("Filtrar por valor (ppm)", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(10.dp))
 
@@ -184,7 +191,6 @@ fun EventosCriticosScreen(navController: NavController) {
 
             Spacer(Modifier.height(10.dp))
 
-            // Botón mostrar solo cuando hay filtros activos
             val hayFiltros =
                 fechaInicio.isNotEmpty() ||
                         fechaFin.isNotEmpty() ||
@@ -207,7 +213,7 @@ fun EventosCriticosScreen(navController: NavController) {
 
             Spacer(Modifier.height(10.dp))
 
-            // Filtrado de datos
+            // === FILTRADO ===
             val filtrados = listaEventos.filter { ev ->
 
                 val cumpleFechaInicio =
@@ -223,7 +229,7 @@ fun EventosCriticosScreen(navController: NavController) {
                 cumpleFechaInicio && cumpleFechaFin && cumpleValor
             }
 
-            // Lista
+            // === LISTA ===
             LazyColumn {
                 items(filtrados) { ev ->
 
@@ -233,7 +239,6 @@ fun EventosCriticosScreen(navController: NavController) {
                             .padding(vertical = 6.dp),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
-
                         Column(Modifier.padding(14.dp)) {
 
                             Text(
@@ -255,7 +260,10 @@ fun EventosCriticosScreen(navController: NavController) {
                                     mostrarConfirmacion = true
                                 }
                             ) {
-                                Icon(Icons.Default.Delete, contentDescription = "Eliminar")
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Eliminar"
+                                )
                             }
                         }
                     }

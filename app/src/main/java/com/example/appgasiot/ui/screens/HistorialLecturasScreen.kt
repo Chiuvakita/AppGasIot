@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,15 +17,14 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.appgasiot.data.model.LecturaGas
 import com.example.appgasiot.navigation.AppScreen
-import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.*
 import java.util.*
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistorialLecturasScreen(navController: NavController) {
 
-    val dbRef = FirebaseDatabase.getInstance().reference
+    val dbRef = FirebaseDatabase.getInstance().reference.child("historial_lecturas")
 
     var lecturas by remember { mutableStateOf(listOf<LecturaGas>()) }
     var cargando by remember { mutableStateOf(true) }
@@ -45,12 +43,14 @@ fun HistorialLecturasScreen(navController: NavController) {
         "Cerrado" to "cerrado"
     )
 
-    LaunchedEffect(Unit) {
-        dbRef.child("historial_lecturas")
-            .get()
-            .addOnSuccessListener { snap ->
+    // 🔴 TIEMPO REAL REAL (listener bien gestionado)
+    DisposableEffect(Unit) {
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
                 val temp = mutableListOf<LecturaGas>()
-                for (item in snap.children) {
+
+                for (item in snapshot.children) {
                     temp.add(
                         LecturaGas(
                             valor = item.child("valor").value?.toString() ?: "",
@@ -60,24 +60,42 @@ fun HistorialLecturasScreen(navController: NavController) {
                         )
                     )
                 }
+
                 lecturas = temp.reversed()
                 cargando = false
             }
+
+            override fun onCancelled(error: DatabaseError) {
+                cargando = false
+            }
+        }
+
+        dbRef.addValueEventListener(listener)
+
+        onDispose {
+            dbRef.removeEventListener(listener)
+        }
     }
 
-    val hayFiltros = fechaInicio.isNotEmpty() ||
-            fechaFin.isNotEmpty() ||
-            valorMin.isNotEmpty() ||
-            valorMax.isNotEmpty() ||
-            compuertaFiltro != "Todos"
+    val hayFiltros =
+        fechaInicio.isNotEmpty() ||
+                fechaFin.isNotEmpty() ||
+                valorMin.isNotEmpty() ||
+                valorMax.isNotEmpty() ||
+                compuertaFiltro != "Todos"
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Historial de lecturas") },
                 navigationIcon = {
-                    IconButton(onClick = { navController.navigate(AppScreen.Home.ruta) }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    IconButton(onClick = {
+                        navController.navigate(AppScreen.Home.ruta)
+                    }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver"
+                        )
                     }
                 }
             )
@@ -91,7 +109,11 @@ fun HistorialLecturasScreen(navController: NavController) {
                 .fillMaxSize()
         ) {
 
-            Text("Todas las mediciones del sensor", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Todas las mediciones del sensor",
+                style = MaterialTheme.typography.titleMedium
+            )
+
             Spacer(Modifier.height(20.dp))
 
             if (cargando) {
@@ -104,10 +126,7 @@ fun HistorialLecturasScreen(navController: NavController) {
                 return@Column
             }
 
-            // ------------------------
-            // FILTROS DE FECHA
-            // ------------------------
-
+            // ---------- FILTROS FECHA ----------
             Text("Filtrar por fecha")
             Spacer(Modifier.height(8.dp))
 
@@ -154,10 +173,7 @@ fun HistorialLecturasScreen(navController: NavController) {
 
             Spacer(Modifier.height(16.dp))
 
-// ------------------------
-// FILTRO DE VALORES
-// ------------------------
-
+            // ---------- FILTRO VALOR ----------
             Text("Filtrar por valor (ppm)")
             Spacer(Modifier.height(8.dp))
 
@@ -165,11 +181,7 @@ fun HistorialLecturasScreen(navController: NavController) {
 
                 OutlinedTextField(
                     value = valorMin,
-                    onValueChange = { nuevo ->
-                        if (nuevo.all { it.isDigit() }) {
-                            valorMin = nuevo
-                        }
-                    },
+                    onValueChange = { if (it.all { c -> c.isDigit() }) valorMin = it },
                     label = { Text("Mínimo") },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
@@ -180,11 +192,7 @@ fun HistorialLecturasScreen(navController: NavController) {
 
                 OutlinedTextField(
                     value = valorMax,
-                    onValueChange = { nuevo ->
-                        if (nuevo.all { it.isDigit() }) {
-                            valorMax = nuevo
-                        }
-                    },
+                    onValueChange = { if (it.all { c -> c.isDigit() }) valorMax = it },
                     label = { Text("Máximo") },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
@@ -194,11 +202,7 @@ fun HistorialLecturasScreen(navController: NavController) {
 
             Spacer(Modifier.height(16.dp))
 
-
-            // ------------------------
-            // FILTRO DE ESTADO COMPUERTA
-            // ------------------------
-
+            // ---------- FILTRO COMPUERTA ----------
             Text("Estado de la compuerta")
             Spacer(Modifier.height(8.dp))
 
@@ -219,7 +223,6 @@ fun HistorialLecturasScreen(navController: NavController) {
                 }
             }
 
-            // Botón limpiar filtros
             if (hayFiltros) {
                 Spacer(Modifier.height(12.dp))
                 TextButton(
@@ -238,17 +241,10 @@ fun HistorialLecturasScreen(navController: NavController) {
 
             Spacer(Modifier.height(16.dp))
 
-            // ------------------------
-            // APLICAR FILTROS
-            // ------------------------
-
+            // ---------- LISTA ----------
             val filtrados = lecturas.filter { lec ->
-
-                val cumpleFechaInicio =
-                    fechaInicio.isBlank() || lec.fecha >= fechaInicio
-
-                val cumpleFechaFin =
-                    fechaFin.isBlank() || lec.fecha <= fechaFin
+                val cumpleFechaInicio = fechaInicio.isBlank() || lec.fecha >= fechaInicio
+                val cumpleFechaFin = fechaFin.isBlank() || lec.fecha <= fechaFin
 
                 val valorReal = lec.valor.toIntOrNull() ?: 0
                 val minV = valorMin.toIntOrNull() ?: Int.MIN_VALUE
@@ -257,19 +253,13 @@ fun HistorialLecturasScreen(navController: NavController) {
 
                 val filtroReal = mapaFiltro[compuertaFiltro] ?: ""
                 val cumpleCompuerta =
-                    filtroReal.isEmpty() ||
-                            lec.compuerta.equals(filtroReal, ignoreCase = true)
+                    filtroReal.isEmpty() || lec.compuerta.equals(filtroReal, true)
 
                 cumpleFechaInicio && cumpleFechaFin && cumpleValor && cumpleCompuerta
             }
 
-            // ------------------------
-            // LISTA
-            // ------------------------
-
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(filtrados) { lectura ->
-
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -277,12 +267,11 @@ fun HistorialLecturasScreen(navController: NavController) {
                         )
                     ) {
                         Column(Modifier.padding(16.dp)) {
-
                             Text("Valor: ${lectura.valor} ppm")
                             Text("Fecha: ${lectura.fecha}  ${lectura.hora}")
-
-                            if (lectura.compuerta.isNotEmpty())
+                            if (lectura.compuerta.isNotEmpty()) {
                                 Text("Compuerta: ${lectura.compuerta.uppercase()}")
+                            }
                         }
                     }
                 }
@@ -292,7 +281,7 @@ fun HistorialLecturasScreen(navController: NavController) {
 
             OutlinedButton(
                 onClick = {
-                    dbRef.child("historial_lecturas").removeValue()
+                    dbRef.removeValue()
                     lecturas = emptyList()
                 },
                 modifier = Modifier.fillMaxWidth()

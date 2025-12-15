@@ -1,24 +1,23 @@
 package com.example.appgasiot.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.example.appgasiot.navigation.AppScreen
 import com.example.appgasiot.data.repository.GasRepository
+import com.example.appgasiot.navigation.AppScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RangosGasScreen(navController: NavController) {
 
-    // Estados de UI
+    // Estados formulario
     var minimo by remember { mutableStateOf("") }
     var maximo by remember { mutableStateOf("") }
     var cargando by remember { mutableStateOf(false) }
@@ -26,47 +25,29 @@ fun RangosGasScreen(navController: NavController) {
     var modoEditar by remember { mutableStateOf(false) }
     var mostrarConfirmacion by remember { mutableStateOf(false) }
 
-    // Config actual
-    var actualMin by remember { mutableStateOf<String?>(null) }
-    var actualMax by remember { mutableStateOf<String?>(null) }
+    val repo = remember { GasRepository() }
 
-    val repo = GasRepository()
+    // 🔥 TIEMPO REAL
+    val configGas by repo.observarRangosGas().collectAsState()
 
-    // Cargar valores actuales desde Firebase
-    LaunchedEffect(Unit) {
-        repo.leerRangos { config ->
-            actualMin = config?.minimo?.toString()
-            actualMax = config?.maximo?.toString()
-        }
-    }
+    val actualMin = configGas?.minimo?.toString()
+    val actualMax = configGas?.maximo?.toString()
 
-    // Diálogo de confirmación para eliminar
+    // Confirmación eliminar
     if (mostrarConfirmacion) {
         AlertDialog(
             onDismissRequest = { mostrarConfirmacion = false },
             title = { Text("Confirmar eliminación") },
-            text = { Text("¿Estás seguro de que deseas eliminar la configuración?") },
+            text = { Text("¿Estás seguro de eliminar la configuración?") },
             confirmButton = {
                 TextButton(onClick = {
                     mostrarConfirmacion = false
                     cargando = true
-
-                    repo.eliminarRangos { ok ->
+                    repo.eliminarRangos {
                         cargando = false
-                        if (ok) {
-                            actualMin = null
-                            actualMax = null
-                            minimo = ""
-                            maximo = ""
-                            modoEditar = false
-                            mensaje = "Configuración eliminada correctamente."
-                        } else {
-                            mensaje = "Error al eliminar."
-                        }
+                        mensaje = if (it) "Configuración eliminada." else "Error al eliminar."
                     }
-                }) {
-                    Text("Eliminar")
-                }
+                }) { Text("Eliminar") }
             },
             dismissButton = {
                 TextButton(onClick = { mostrarConfirmacion = false }) {
@@ -79,10 +60,13 @@ fun RangosGasScreen(navController: NavController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Rangos de Gas") },
+                title = { Text("Rangos de Gas - Alerta") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigate(AppScreen.Home.ruta) }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Volver"
+                        )
                     }
                 }
             )
@@ -90,30 +74,29 @@ fun RangosGasScreen(navController: NavController) {
     ) { padding ->
 
         Column(
-            Modifier
+            modifier = Modifier
                 .padding(padding)
                 .padding(24.dp)
-                .fillMaxSize(),
-            verticalArrangement = Arrangement.Top
+                .fillMaxSize()
         ) {
 
             Text("Configuración actual:", style = MaterialTheme.typography.titleMedium)
 
             if (actualMin != null && actualMax != null) {
-                Text("• Rango mínimo: ${actualMin} ppm")
-                Text("• Rango máximo: ${actualMax} ppm")
+                Text("• Rango mínimo: $actualMin ppm")
+                Text("• Rango máximo: $actualMax ppm")
             } else {
                 Text("No hay configuración guardada.")
             }
 
             Spacer(Modifier.height(20.dp))
 
-            // Botón EDITAR
             if (actualMin != null && actualMax != null && !modoEditar) {
+
                 OutlinedButton(
                     onClick = {
-                        minimo = actualMin ?: ""
-                        maximo = actualMax ?: ""
+                        minimo = actualMin
+                        maximo = actualMax
                         modoEditar = true
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -121,23 +104,20 @@ fun RangosGasScreen(navController: NavController) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // Botón ELIMINAR
                 OutlinedButton(
                     onClick = { mostrarConfirmacion = true },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Eliminar configuración") }
-
-                Spacer(Modifier.height(20.dp))
             }
 
-            // FORMULARIO
             if (modoEditar || actualMin == null) {
+
+                Spacer(Modifier.height(20.dp))
 
                 OutlinedTextField(
                     value = minimo,
                     onValueChange = { minimo = it },
                     label = { Text("Rango mínimo (ppm)") },
-                    singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -148,46 +128,35 @@ fun RangosGasScreen(navController: NavController) {
                     value = maximo,
                     onValueChange = { maximo = it },
                     label = { Text("Rango máximo (ppm)") },
-                    singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 Spacer(Modifier.height(20.dp))
 
-                // BOTÓN GUARDAR
                 Button(
                     onClick = {
                         val minVal = minimo.toIntOrNull()
                         val maxVal = maximo.toIntOrNull()
 
-                        when {
+                        mensaje = when {
                             minVal == null || maxVal == null ->
-                                mensaje = "Debe ingresar valores numéricos."
+                                "Debe ingresar valores numéricos."
 
                             minVal >= maxVal ->
-                                mensaje = "El mínimo debe ser menor que el máximo."
+                                "El mínimo debe ser menor que el máximo."
 
                             else -> {
                                 cargando = true
-                                repo.guardarRangos(minVal, maxVal) { ok ->
+                                repo.guardarRangos(minVal, maxVal) {
                                     cargando = false
-
-                                    if (ok) {
-                                        actualMin = minVal.toString()
-                                        actualMax = maxVal.toString()
-                                        modoEditar = false
-                                        mensaje = "Rangos guardados correctamente."
-                                    } else {
-                                        mensaje = "Error al guardar."
-                                    }
                                 }
+                                modoEditar = false
+                                "Rangos guardados correctamente."
                             }
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
+                    modifier = Modifier.fillMaxWidth().height(52.dp)
                 ) {
                     Text(if (cargando) "Guardando..." else "Guardar")
                 }
@@ -204,7 +173,7 @@ fun RangosGasScreen(navController: NavController) {
 
             mensaje?.let {
                 Text(
-                    text = it,
+                    it,
                     color = if (it.contains("correctamente"))
                         MaterialTheme.colorScheme.primary
                     else
