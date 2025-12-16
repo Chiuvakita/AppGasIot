@@ -21,8 +21,16 @@ class FirebaseControlCompuertaService {
                 val modo = snapshot.child("modo").getValue(String::class.java) ?: "manual"
                 val estado = snapshot.child("estado").getValue(String::class.java) ?: "cerrado"
 
-                val min = snapshot.child("rango_min").getValue(Int::class.java) ?: 0
-                val max = snapshot.child("rango_max").getValue(Int::class.java) ?: 0
+                val min = snapshot
+                    .child("rangos")
+                    .child("minimo")
+                    .getValue(Int::class.java) ?: 0
+
+                val max = snapshot
+                    .child("rangos")
+                    .child("maximo")
+                    .getValue(Int::class.java) ?: 0
+
 
                 ControlCompuertaState.setModo(modo)
                 ControlCompuertaState.setEstado(estado)
@@ -46,22 +54,22 @@ class FirebaseControlCompuertaService {
     }
 
     fun guardarRangos(min: Int, max: Int) {
-        val data = mapOf(
-            "rango_min" to min,
-            "rango_max" to max
+        db.child("rangos").setValue(
+            mapOf(
+                "minimo" to min,
+                "maximo" to max
+            )
         )
-        db.updateChildren(data)
     }
 
+
     fun eliminarRangos() {
-        val updates = mapOf<String, Any?>(
-            "rango_min" to null,
-            "rango_max" to null
-        )
-        db.updateChildren(updates).addOnSuccessListener {
-            ControlCompuertaState.clearRangos()
-        }
+        db.child("rangos").removeValue()
+            .addOnSuccessListener {
+                ControlCompuertaState.clearRangos()
+            }
     }
+
 
     fun detener() {
         listener?.let {
