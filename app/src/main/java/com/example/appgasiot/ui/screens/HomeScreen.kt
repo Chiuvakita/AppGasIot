@@ -16,6 +16,9 @@ import com.example.appgasiot.navigation.AppScreen
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import com.example.appgasiot.utils.hayInternet
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,6 +28,15 @@ fun HomeScreen(navController: NavController) {
     val scope = rememberCoroutineScope()
 
     val db = FirebaseDatabase.getInstance().reference
+
+    val context = LocalContext.current
+    var mostrarSinConexion by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (!hayInternet(context)) {
+            mostrarSinConexion = true
+        }
+    }
 
     var estadoCompuerta by remember { mutableStateOf("Cargando...") }
     var ultimaLectura by remember { mutableStateOf("Cargando...") }
@@ -99,6 +111,25 @@ fun HomeScreen(navController: NavController) {
     // ==============================
     // UI
     // ==============================
+    if (mostrarSinConexion) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Sin conexión a Internet") },
+            text = {
+                Text(
+                    "La aplicación no tiene conexión en este momento.\n\n" +
+                            "Puedes continuar usando la app con normalidad. " +
+                            "Los datos se sincronizarán automáticamente cuando vuelva la conexión."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { mostrarSinConexion = false }) {
+                    Text("Continuar")
+                }
+            }
+        )
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {

@@ -24,7 +24,10 @@ import java.util.*
 @Composable
 fun HistorialLecturasScreen(navController: NavController) {
 
-    val dbRef = FirebaseDatabase.getInstance().reference.child("historial_lecturas")
+    val dbRef = FirebaseDatabase.getInstance()
+        .reference
+        .child("historial_lecturas")
+        .limitToLast(500)
 
     var lecturas by remember { mutableStateOf(listOf<LecturaGas>()) }
     var cargando by remember { mutableStateOf(true) }
@@ -43,7 +46,6 @@ fun HistorialLecturasScreen(navController: NavController) {
         "Cerrado" to "cerrado"
     )
 
-    // 🔴 TIEMPO REAL REAL (listener bien gestionado)
     DisposableEffect(Unit) {
 
         val listener = object : ValueEventListener {
@@ -126,7 +128,7 @@ fun HistorialLecturasScreen(navController: NavController) {
                 return@Column
             }
 
-            // ---------- FILTROS FECHA ----------
+            // ---------- FILTROS ----------
             Text("Filtrar por fecha")
             Spacer(Modifier.height(8.dp))
 
@@ -173,11 +175,10 @@ fun HistorialLecturasScreen(navController: NavController) {
 
             Spacer(Modifier.height(16.dp))
 
-            // ---------- FILTRO VALOR ----------
             Text("Filtrar por valor (ppm)")
             Spacer(Modifier.height(8.dp))
 
-            Row(Modifier.fillMaxWidth()) {
+            Row {
 
                 OutlinedTextField(
                     value = valorMin,
@@ -202,7 +203,6 @@ fun HistorialLecturasScreen(navController: NavController) {
 
             Spacer(Modifier.height(16.dp))
 
-            // ---------- FILTRO COMPUERTA ----------
             Text("Estado de la compuerta")
             Spacer(Modifier.height(8.dp))
 
@@ -211,14 +211,7 @@ fun HistorialLecturasScreen(navController: NavController) {
                     AssistChip(
                         onClick = { compuertaFiltro = estado },
                         label = { Text(estado) },
-                        modifier = Modifier.padding(end = 8.dp),
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor =
-                                if (compuertaFiltro == estado)
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                else
-                                    MaterialTheme.colorScheme.surfaceVariant
-                        )
+                        modifier = Modifier.padding(end = 8.dp)
                     )
                 }
             }
@@ -241,7 +234,7 @@ fun HistorialLecturasScreen(navController: NavController) {
 
             Spacer(Modifier.height(16.dp))
 
-            // ---------- LISTA ----------
+            // ---------- FILTRADO ----------
             val filtrados = lecturas.filter { lec ->
                 val cumpleFechaInicio = fechaInicio.isBlank() || lec.fecha >= fechaInicio
                 val cumpleFechaFin = fechaFin.isBlank() || lec.fecha <= fechaFin
@@ -258,21 +251,28 @@ fun HistorialLecturasScreen(navController: NavController) {
                 cumpleFechaInicio && cumpleFechaFin && cumpleValor && cumpleCompuerta
             }
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(filtrados) { lectura ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            // ---------- TIMELINE ----------
+            val lecturasAgrupadas = filtrados
+                .groupBy { it.fecha }
+                .toSortedMap(compareByDescending { it })
+
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+
+                lecturasAgrupadas.forEach { (fecha, lecturasDia) ->
+
+                    item {
+                        Text(
+                            text = fecha,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
                         )
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text("Valor: ${lectura.valor} ppm")
-                            Text("Fecha: ${lectura.fecha}  ${lectura.hora}")
-                            if (lectura.compuerta.isNotEmpty()) {
-                                Text("Compuerta: ${lectura.compuerta.uppercase()}")
-                            }
-                        }
+                    }
+
+                    items(lecturasDia.sortedByDescending { it.hora }) { lectura ->
+                        TimelineLecturaItem(lectura)
                     }
                 }
             }
@@ -281,12 +281,69 @@ fun HistorialLecturasScreen(navController: NavController) {
 
             OutlinedButton(
                 onClick = {
-                    dbRef.removeValue()
+                    dbRef.ref.removeValue()
                     lecturas = emptyList()
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Eliminar historial completo")
+            }
+        }
+    }
+}
+
+@Composable
+fun TimelineLecturaItem(lectura: LecturaGas) {
+
+    val colorEstado = when (lectura.compuerta.lowercase()) {
+        "abierto" -> MaterialTheme.colorScheme.primary
+        "cerrado" -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.outline
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(22.dp)
+        ) {
+            Surface(
+                color = colorEstado,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.size(10.dp)
+            ) {}
+            Spacer(
+                modifier = Modifier
+                    .width(2.dp)
+                    .height(60.dp)
+            )
+        }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(Modifier.padding(14.dp)) {
+
+                Text(
+                    text = "${lectura.hora} • ${lectura.valor} ppm",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+
+                if (lectura.compuerta.isNotBlank()) {
+                    Text(
+                        text = lectura.compuerta.uppercase(),
+                        color = colorEstado,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
         }
     }
